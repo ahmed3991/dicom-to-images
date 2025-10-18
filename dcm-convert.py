@@ -8,15 +8,53 @@ from PIL import Image
 from tqdm import tqdm
 
 # Paths
-input_csv = "input/dicom_paths.csv"            # Input CSV file with a 'dcm_path' column
-output_folder = "output/extracted_images" # Folder where extracted PNGs are stored
-output_info_csv = "output/dicom_info.csv" # Output CSV file containing metadata
+input_csv = "input/dicom_paths.csv"              # Input CSV file with a 'dcm_path' column
+output_folder = "output/extracted_images"        # Folder for extracted PNGs
+output_info_csv = "output/dicom_info.csv"        # Output CSV file for metadata
 
 # Create output folder if not exists
 os.makedirs(output_folder, exist_ok=True)
 
 # Read CSV
 df = pd.read_csv(input_csv)
+
+# DICOM attributes to extract
+selected_tags = [
+    "md5",
+    "Modality",
+    "ImageType",
+    "BodyPartExamined",
+    "ViewPosition",
+    "PresentationIntentType",
+    "PhotometricInterpretation",
+    "WindowCenter",
+    "WindowWidth",
+    "KVP",
+    "ExposureTime",
+    "XRayTubeCurrent",
+    "Exposure",
+    "ImagerPixelSpacing",
+    "Grid",
+    "ExposureIndex",
+    "DeviationIndex",
+    "RescaleIntercept",
+    "RescaleSlope",
+    "RescaleType",
+    "Manufacturer",
+    "ManufacturerModelName",
+    "DetectorType",
+    "Sensitivity",
+    "SoftwareVersions",
+    "Rows",
+    "Columns",
+    "SamplesPerPixel",
+    "BitsAllocated",
+    "BitsStored",
+    "HighBit",
+    "PixelRepresentation",
+    "PixelIntensityRelationship",
+    "PixelIntensityRelationshipSign",
+]
 
 # Prepare results list
 results = []
@@ -51,16 +89,16 @@ for _, row in tqdm(df.iterrows(), total=len(df), desc="Processing DICOMs"):
             # Skip both image and metadata writing
             continue
 
-        # Extract DICOM metadata (excluding PixelData)
-        info = {
-            "md5": md5_hash,
-            "original_filename": os.path.basename(dcm_path),
-        }
-        for elem in ds:
-            if elem.VR != "SQ" and elem.keyword != "PixelData":
-                tag_name = elem.keyword or str(elem.tag)
-                value = str(elem.value)
-                info[tag_name] = value
+        # Extract only selected DICOM metadata
+        info = {"md5": md5_hash}
+        for tag in selected_tags:
+            if tag == "md5":
+                continue
+            try:
+                value = getattr(ds, tag)
+                info[tag] = str(value)
+            except AttributeError:
+                info[tag] = None  # missing tag
 
         # Append metadata
         results.append(info)
@@ -72,6 +110,6 @@ for _, row in tqdm(df.iterrows(), total=len(df), desc="Processing DICOMs"):
 if results:
     info_df = pd.DataFrame(results)
     info_df.to_csv(output_info_csv, index=False)
-    print(f"✅ DICOM metadata saved to {output_info_csv}")
+    print(f"✅ Selected DICOM metadata saved to {output_info_csv}")
 else:
     print("⚠️ No new images processed.")

@@ -21,6 +21,7 @@ df = pd.read_csv(input_csv)
 # DICOM attributes to extract
 selected_tags = [
     "md5",
+    "StudyInstanceUID",
     "Modality",
     "ImageType",
     "BodyPartExamined",
@@ -56,10 +57,18 @@ selected_tags = [
     "PixelIntensityRelationshipSign",
 ]
 
-# Prepare results list
-results = []
+# ----------------------------------------------------------------------
+# 1. Initialize the output CSV with headers
+# This ensures the file exists and has the correct columns.
+# It uses a temporary DataFrame to get the columns.
+print(f"Initializing {output_info_csv}...")
+initial_df = pd.DataFrame(columns=selected_tags)
+# Use 'w' mode (write) and 'header=True' for the first time
+initial_df.to_csv(output_info_csv, index=False, mode='w', header=True)
+# ----------------------------------------------------------------------
 
 # Process each DICOM path
+# No need for the 'results' list anymore, we save directly inside the loop.
 for _, row in tqdm(df.iterrows(), total=len(df), desc="Processing DICOMs"):
     dcm_path = row["dcm_path"]
 
@@ -87,7 +96,7 @@ for _, row in tqdm(df.iterrows(), total=len(df), desc="Processing DICOMs"):
                 im.save(f, format="PNG")
         except FileExistsError:
             # Skip both image and metadata writing
-            continue
+            continue # Go to the next DICOM file
 
         # Extract only selected DICOM metadata
         info = {"md5": md5_hash}
@@ -95,21 +104,23 @@ for _, row in tqdm(df.iterrows(), total=len(df), desc="Processing DICOMs"):
             if tag == "md5":
                 continue
             try:
+                # Use .get(tag, None) on ds for robustness if available, 
+                # but since ds is a dataset object, getattr is correct.
                 value = getattr(ds, tag)
                 info[tag] = str(value)
             except AttributeError:
                 info[tag] = None  # missing tag
 
-        # Append metadata
-        results.append(info)
+        # --------------------------------------------------------------
+        # 2. Convert the single record to a DataFrame
+        info_df = pd.DataFrame([info], columns=selected_tags)
+
+        # 3. Append the record to the output CSV
+        # 'mode="a"' for append, 'header=False' so it doesn't write headers again
+        info_df.to_csv(output_info_csv, index=False, mode='a', header=False)
+        # --------------------------------------------------------------
 
     except Exception as e:
         print(f"❌ Error processing {dcm_path}: {e}")
 
-# Save all metadata to CSV
-if results:
-    info_df = pd.DataFrame(results)
-    info_df.to_csv(output_info_csv, index=False)
-    print(f"✅ Selected DICOM metadata saved to {output_info_csv}")
-else:
-    print("⚠️ No new images processed.")
+print(f"\n✅ Processing complete. Metadata appended line-by-line to {output_info_csv}")

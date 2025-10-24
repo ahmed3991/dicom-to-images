@@ -58,13 +58,21 @@ selected_tags = [
 ]
 
 # ----------------------------------------------------------------------
-# 1. Initialize the output CSV with headers
-# This ensures the file exists and has the correct columns.
-# It uses a temporary DataFrame to get the columns.
-print(f"Initializing {output_info_csv}...")
-initial_df = pd.DataFrame(columns=selected_tags)
-# Use 'w' mode (write) and 'header=True' for the first time
-initial_df.to_csv(output_info_csv, index=False, mode='w', header=True)
+# 1. Initialize or Prepare the output CSV file for appending
+print(f"Checking existence of {output_info_csv}...")
+
+# Check if the output CSV already exists
+csv_exists = os.path.exists(output_info_csv)
+
+if not csv_exists:
+    # If the file does NOT exist, create it with headers (mode='w')
+    print(f"File not found. Creating {output_info_csv} with headers.")
+    initial_df = pd.DataFrame(columns=selected_tags)
+    initial_df.to_csv(output_info_csv, index=False, mode='w', header=True)
+else:
+    # If the file DOES exist, just proceed. The rest of the script will use mode='a'.
+    print(f"File found. Appending new records to {output_info_csv}.")
+    
 # ----------------------------------------------------------------------
 
 # Process each DICOM path
@@ -77,7 +85,7 @@ for _, row in tqdm(df.iterrows(), total=len(df), desc="Processing DICOMs"):
         ds = pydicom.dcmread(dcm_path, force=True)
 
         # Apply VOI LUT if available
-        image = apply_voi_lut(ds.pixel_array, ds)
+        image = apply_voi_lut(ds.pixel_array, ds, index=0,)
         if getattr(ds, "PhotometricInterpretation", "") == "MONOCHROME1":
             image = np.amax(image) - image
         image = image - np.min(image)
